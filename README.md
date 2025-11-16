@@ -1,2 +1,7 @@
 # hotel-management-class
-hotel management class description
+TEAM MEMBERS:
+1. Gunn Sharma
+2. Lakshay Fauzdar
+3. Nishant dhiman
+4. Aditya Sharma
+5. Pushkar Srivastava 
