@@ -1,0 +1,422 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <ctime>
+#include <fstream>
+#include <exception>
+#include <limits>
+using namespace std;
+
+// =====================================================
+//                CUSTOM EXCEPTION
+// =====================================================
+class HotelException : public exception {
+    string msg;
+public:
+    HotelException(const string &m): msg(m) {}
+    const char* what() const noexcept override { return msg.c_str(); }
+};
+
+// =====================================================
+//                TEMPLATES ADDED HERE
+// =====================================================
+
+//Template Storage for any datatype
+template<typename T>
+class Storage {
+    vector<T> data;
+public:
+    void add(const T &item) { data.push_back(item); }
+    vector<T>& get() { return data; }
+    bool empty() const { return data.empty(); }
+};
+
+//Template Safe Input Function 
+template<typename T>
+T safeInput(const string &msg) {
+    T value;
+    while (true) {
+        cout << msg;
+        if (cin >> value) break;
+        cout << "Invalid input! Try again.\n";
+        cin.clear();
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    }
+    return value;
+}
+
+// =====================================================
+//                UTILITY
+// =====================================================
+class Utility {
+public:
+    static string getDate() {
+        time_t now = time(nullptr);
+        string d = ctime(&now);
+        if (!d.empty()) d.pop_back();
+        return d;
+    }
+    static void log(const string &msg) {
+        ofstream f("hotel_log.txt", ios::app);
+        if (f) f << "[" << getDate() << "] " << msg << "\n";
+    }
+};
+
+// =====================================================
+//                STAFF
+// =====================================================
+class Staff {
+protected:
+    int id;
+    string name, role;
+public:
+    Staff(int i=0, string n="Unknown", string r="Staff") : id(i), name(n), role(r) {}
+    virtual ~Staff() {}
+    virtual void work() = 0;
+};
+
+class Manager : public Staff {
+public:
+    Manager(int i, string n): Staff(i,n,"Manager") {}
+    void work() override { cout << name << " managing operations.\n"; }
+};
+
+class Chef : public Staff {
+public:
+    Chef(int i, string n): Staff(i,n,"Chef") {}
+    void work() override { cout << name << " preparing food.\n"; }
+};
+
+class Housekeeping : public Staff {
+public:
+    Housekeeping(int i, string n): Staff(i,n,"Housekeeping") {}
+    void work() override { cout << name << " cleaning rooms.\n"; }
+};
+
+class GeneralStaff : public Staff {
+public:
+    GeneralStaff(int i, string n, string r) : Staff(i,n,r) {}
+    void work() override { cout << name << " (" << role << ") working.\n"; }
+};
+
+// =====================================================
+//                ROOMS / ADDRESS / DB
+// =====================================================
+class Address {
+public:
+    string city, street, zip;
+    Address(string c="", string s="", string z="") : city(c), street(s), zip(z) {}
+};
+
+class Database {
+public:
+    void saveBooking(int r, const string &g) { Utility::log("Booking: " + g + " -> Room " + to_string(r)); }
+    void saveFeedback(const string &fb) { Utility::log("Feedback: " + fb); }
+};
+
+class ServiceManager;
+
+class Room {
+    int no;
+    bool occupied;
+    string guest;
+    Address addr;
+public:
+    Room(int n=0): no(n), occupied(false) {}
+
+    int getNo() const { return no; }
+
+    void checkIn(const string &g, const Address &a, Database &db) {
+        if (occupied) throw HotelException("Room already occupied!");
+        occupied = true;
+        guest = g;
+        addr = a;
+        db.saveBooking(no, g);
+        cout << "Check-in complete for " << g << " in Room " << no << "\n";
+    }
+
+    bool isOccupied() const { return occupied; }
+    string getGuestName() const { return guest; }
+
+    void checkOut(ServiceManager &sm);
+};
+
+// =====================================================
+//                SERVICES
+// =====================================================
+class ServiceManager {
+public:
+    void invoice(const string &name, double amt) {
+        cout << "[INVOICE] " << name << " | Rs." << amt << "\n";
+        Utility::log("Invoice generated for " + name);
+    }
+    void runService(const string &svc) {
+        cout << svc << " service dispatched.\n";
+        Utility::log("Service used: " + svc);
+    }
+};
+
+void Room::checkOut(ServiceManager &sm) {
+    if (!occupied) throw HotelException("Room is already empty!");
+    sm.invoice(guest, 1500);
+    occupied = false;
+    guest = "";
+    cout << "Checkout done for room " << no << "\n";
+}
+
+// =====================================================
+//                KITCHEN
+// =====================================================
+class Kitchen {
+    struct MenuItem { string name; double price; };
+    vector<MenuItem> menu;
+public:
+    Kitchen() {
+        menu = { {"Pasta",120}, {"Pizza",250}, {"Salad",80} };
+    }
+    void showMenu() {
+        cout << "\n--- KITCHEN MENU ---\n";
+        for (int i=0;i<menu.size();i++)
+            cout << i+1 << ". " << menu[i].name << " (Rs." << menu[i].price << ")\n";
+    }
+    double order(int c, string &item) {
+        if (c < 1 || c > menu.size()) throw HotelException("Invalid menu choice!");
+        item = menu[c-1].name;
+        return menu[c-1].price;
+    }
+};
+
+// =====================================================
+//                FOOD CART
+// =====================================================
+class MenuItem2 {
+public:
+    string name, category;
+    double price;
+    MenuItem2(string n, double p, string c) : name(n), price(p), category(c) {}
+};
+
+class FoodOrder {
+    Storage<MenuItem2*> menu;   // template used
+    Storage<MenuItem2*> cart;   // template used
+public:
+    void loadMenu() {
+        menu.add(new MenuItem2("Burger",120,"Main"));
+        menu.add(new MenuItem2("Pizza",250,"Main"));
+        menu.add(new MenuItem2("Coke",50,"Drink"));
+        menu.add(new MenuItem2("Ice Cream",80,"Dessert"));
+    }
+    void showMenu() {
+        cout << "\n--- FOOD MENU ---\n";
+        auto &m = menu.get();
+        for (int i=0;i<m.size();i++)
+            cout << i+1 << ". " << m[i]->name << " (Rs." << m[i]->price << ")\n";
+    }
+    void placeOrder(int c) {
+        auto &m = menu.get();
+        if (c>=1 && c<=m.size()) {
+            cart.add(m[c-1]);
+            cout << "Added: " << m[c-1]->name << endl;
+        }
+        else cout << "Invalid choice!\n";
+    }
+    void showBill() {
+        auto &items = cart.get();
+        if (items.empty()) { cout << "Cart empty.\n"; return; }
+        double total=0;
+        cout << "\n--- BILL ---\n";
+        for (auto x : items) {
+            cout << x->name << " - Rs." << x->price << endl;
+            total += x->price;
+        }
+        cout << "\nTotal: Rs." << total << "\n";
+    }
+};
+
+// =====================================================
+//                ROOM TYPE
+// =====================================================
+class RoomType {
+    string name;
+    double price;
+    vector<string> features;
+    int available;
+public:
+    RoomType(string n="", double p=0, vector<string> f={}, int a=0)
+        : name(n), price(p), features(f), available(a) {}
+
+    void show() const {
+        cout << "\nRoom: " << name << "\nPrice: Rs." << price
+             << "\nAvailable: " << available << "\nFeatures:\n";
+        for (auto &x : features) cout << " - " << x << endl;
+    }
+    string getName() const { return name; }
+
+    void book() {
+        if (available > 0) { available--; cout << name << " booked.\n"; }
+        else cout << name << " full.\n";
+    }
+    void cancelBooking() { available++; cout << name << " booking cancelled.\n"; }
+};
+
+class RoomTypeManager {
+    vector<RoomType> list;
+public:
+    void add(const RoomType &rt) { list.push_back(rt); }
+    void show() { for (auto &rt : list) rt.show(); }
+};
+
+// =====================================================
+//                HOTEL SYSTEM
+// =====================================================
+class Hotel {
+    Storage<Room> rooms;                 // template used
+    vector<Staff*> staff;
+    Kitchen kitchen;
+    FoodOrder food;
+    ServiceManager services;
+    Database db;
+    RoomTypeManager rtm;
+    vector<string> history;
+
+public:
+    Hotel() {
+        rooms.add(Room(101));
+        rooms.add(Room(102));
+
+        staff.push_back(new Manager(1,"Rahul"));
+        staff.push_back(new Chef(2,"Steve"));
+        staff.push_back(new Housekeeping(3,"Rohan"));
+        staff.push_back(new GeneralStaff(4,"Sita","Receptionist"));
+
+        rtm.add(RoomType("Standard",1000,{"TV","WiFi","AC"},5));
+        rtm.add(RoomType("Deluxe",2000,{"TV","WiFi","AC","Fridge"},3));
+        rtm.add(RoomType("Suite",3500,{"AC","WiFi","TV","Living Area"},2));
+
+        food.loadMenu();
+    }
+
+    ~Hotel() { for (auto s : staff) delete s; }
+
+    void run() {
+        while (true) {
+            cout << "\n=== HOTEL MENU ===\n";
+            cout << "1. Check-In\n2. Check-Out\n3. Kitchen\n4. Service\n5. Staff Work\n6. Room Types\n7. Food Cart\n8. Feedback\n9. Exit\nChoice: ";
+
+            int c = safeInput<int>("");
+
+            try {
+                switch (c) {
+                    case 1: checkIn(); break;
+                    case 2: checkOut(); break;
+                    case 3: handleKitchen(); break;
+                    case 4: handleService(); break;
+                    case 5: for (auto s : staff) s->work(); break;
+                    case 6: rtm.show(); break;
+                    case 7: handleFoodCart(); break;
+                    case 8: feedback(); break;
+                    case 9: summary(); return;
+                    default: throw HotelException("Invalid option!");
+                }
+            }
+            catch (exception &e) {
+                cout << "[ERROR] " << e.what() << endl;
+            }
+        }
+    }
+
+private:
+
+    void checkIn() {
+        int r = safeInput<int>("Room No: ");
+
+        string n,c,s,z;
+        cout << "Name: "; cin.ignore(); getline(cin,n);
+        cout << "City: "; getline(cin,c);
+        cout << "Street: "; getline(cin,s);
+        cout << "Zip: "; getline(cin,z);
+
+        auto &rs = rooms.get();
+        for (auto &room : rs) {
+            if (room.getNo() == r) {
+                room.checkIn(n, Address(c,s,z), db);
+                history.push_back("CheckIn: " + n);
+                return;
+            }
+        }
+
+        Room newRoom(r);
+        newRoom.checkIn(n, Address(c,s,z), db);
+        rooms.add(newRoom);
+        cout << "New room created.\n";
+    }
+
+    void checkOut() {
+        int r = safeInput<int>("Room No: ");
+        auto &rs = rooms.get();
+
+        for (auto &room : rs) {
+            if (room.getNo() == r) {
+                room.checkOut(services);
+                history.push_back("CheckOut: Room " + to_string(r));
+                return;
+            }
+        }
+
+        throw HotelException("Room not found!");
+    }
+
+    void handleKitchen() {
+        kitchen.showMenu();
+        int x = safeInput<int>("Choose dish: ");
+        string item;
+        double price = kitchen.order(x, item);
+        services.invoice(item, price);
+    }
+
+    void handleService() {
+        cout << "1.Medical 2.Transport 3.Laundry\n";
+        int x = safeInput<int>("Choice: ");
+        string svc = (x==1)?"Medical":(x==2)?"Transport":(x==3)?"Laundry":"";
+        if (svc=="") throw HotelException("Invalid service!");
+        services.runService(svc);
+    }
+
+    void feedback() {
+        string fb;
+        cout << "Feedback: ";
+        cin.ignore();
+        getline(cin, fb);
+        db.saveFeedback(fb);
+        cout << "Thank you!\n";
+    }
+
+    void handleFoodCart() {
+        cout << "\n1.Show Menu\n2.Order\n3.Bill\n";
+        int x = safeInput<int>("Choice: ");
+
+        if (x==1) food.showMenu();
+        else if (x==2) {
+            food.showMenu();
+            int i = safeInput<int>("Select: ");
+            food.placeOrder(i);
+        }
+        else if (x==3) food.showBill();
+        else cout << "Invalid!\n";
+    }
+
+    void summary() {
+        cout << "\n--- SESSION SUMMARY ---\n";
+        for (auto &h : history) cout << "> " << h << endl;
+        cout << "Goodbye!\n";
+    }
+};
+
+// =====================================================
+//                MAIN
+// =====================================================
+int main() {
+    Hotel h;
+    h.run();
+    return 0;
+}
